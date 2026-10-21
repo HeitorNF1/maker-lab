@@ -1,365 +1,241 @@
-# Integrantes
+# Carrinho Robótico com ESP32, Wi-Fi e Sensor Ultrassônico
 
-Guilherme Daher - RM98611
-Gabriel Freitas - RM550187
-Heitor Nobre - RM551539
-Vinicius Yamashita - RM550908
-Lucca Alexandre - RM99700
+## Integrantes
 
-# 🚗 Carrinho Robótico com Arduino, Bluetooth e Sensor Ultrassônico
+| Integrante | RM |
+|---|---|
+| Guilherme Daher | 98611 |
+| Gabriel Freitas | 550187 |
+| Heitor Nobre | 551539 |
+| Vinicius Yamashita | 550908 |
+| Lucca Alexandre | 99700 |
 
-Projeto de um **carrinho robótico de duas rodas motorizadas**, controlado por **Arduino Uno**, com comunicação via **Bluetooth HC-05** e detecção de obstáculos utilizando o sensor ultrassônico **HC-SR04**.
+## Sobre o projeto
 
-O acionamento dos motores é realizado por um driver **DRV8833**, enquanto a alimentação utiliza uma bateria **18650** e um conversor **Step-Up de 5 V**.
+Carrinho robótico de duas rodas motorizadas, com controle pelo navegador e leitura de distância pelo sensor ultrassônico **HC-SR04**.
+
+O firmware atual utiliza **ESP32**, uma ponte H para controlar dois motores DC e comunicação por **Wi-Fi**. A documentação inicial descrevia Arduino Uno e Bluetooth HC-05; esses componentes não são utilizados pelo firmware ESP32 apresentado nesta atualização.
+
+O projeto também foi preparado para o CP2: coletar medições reais, gerar arquivos CSV, treinar um modelo no Edge Impulse e utilizar a classificação embarcada para alterar o comportamento do carrinho.
 
 ![Montagem do carrinho](docs/carrinho-robotico.png)
 
----
+## Evolução do projeto
 
-## 📌 Objetivo do projeto
+| Etapa | Características |
+|---|---|
+| Versão inicialmente documentada | Arduino Uno, Bluetooth HC-05 e ponte H |
+| Código do CP1 fornecido | ESP32, controle Wi-Fi, HC-SR04 e bloqueio de avanço a até 20 cm |
+| Evolução para o CP2 | Coleta em CSV, diagnóstico do sensor no Serial e código preparado para inferência TinyML |
 
-Desenvolver uma plataforma robótica móvel capaz de:
+Os arquivos e commits anteriores devem ser preservados para demonstrar a evolução CP1 → CP2.
 
-- movimentar-se para frente e para trás;
-- realizar curvas para esquerda e direita;
-- receber comandos por Bluetooth;
-- detectar obstáculos à frente;
-- controlar dois motores DC de maneira independente;
-- funcionar de forma portátil utilizando bateria recarregável.
-
----
-
-## 🧰 Componentes
+## Componentes
 
 | Componente | Quantidade | Função |
 |---|---:|---|
-| Arduino Uno | 1 | Controlador principal |
-| Motor DC com caixa de redução | 2 | Movimentação do carrinho |
+| ESP32 | 1 | Controlador e ponto de acesso Wi-Fi |
+| Motor DC com redução | 2 | Movimentação |
 | Rodas | 2 | Tração |
-| Driver DRV8833 | 1 | Controle dos motores |
-| Módulo Bluetooth HC-05 | 1 | Comunicação sem fio |
-| Sensor ultrassônico HC-SR04 | 1 | Detecção de obstáculos |
-| Bateria 18650 | 1 | Alimentação |
-| Suporte para bateria 18650 | 1 | Fixação e conexão da bateria |
-| Conversor Step-Up 5 V | 1 | Regulagem da alimentação |
-| Chave liga/desliga | 1 | Controle geral de energia |
-| Chassi | 1 | Estrutura do robô |
-| Jumpers, fios e conectores | — | Interligações elétricas |
+| Ponte H de dois canais | 1 | Acionamento dos motores |
+| HC-SR04 | 1 | Medição de distância frontal |
+| Bateria e circuito de alimentação | Conforme montagem | Alimentação do conjunto |
+| Chassi, fios e conectores | Conforme montagem | Estrutura e interligações |
 
----
+**Identificação da ponte H:** o texto anterior cita DRV8833 e o código fornecido identifica L298N nos comentários. O modelo instalado deve ser confirmado na montagem. Os pinos abaixo representam os quatro sinais de controle usados no firmware.
 
-## 🧠 Arquitetura do sistema
+## Ligações usadas no código
 
-```text
-                +-------------------+
-                |   Bateria 18650   |
-                +---------+---------+
-                          |
-                    Liga / Desliga
-                          |
-                +---------v---------+
-                |    Step-Up 5 V    |
-                +---------+---------+
-                          |
-          +---------------+----------------+
-          |               |                |
-          v               v                v
-     Arduino Uno        HC-05          HC-SR04
-          |
-          v
-       DRV8833
-       /     \
-      v       v
-Motor Esq.  Motor Dir.
-```
+| Sinal | GPIO do ESP32 |
+|---|---:|
+| IN1 | 18 |
+| IN2 | 5 |
+| IN3 | 12 |
+| IN4 | 14 |
+| HC-SR04 TRIG | 27 |
+| HC-SR04 ECHO | 26 |
+| GND | Terra comum entre os circuitos |
 
-O **Arduino Uno** recebe os comandos enviados pelo celular através do **HC-05** e controla o **DRV8833**, responsável por definir o sentido de rotação e a velocidade dos motores.
+A alimentação deve respeitar as especificações de cada módulo. O ECHO do HC-SR04 padrão de 5 V precisa de adaptação de nível para a entrada do ESP32. Os motores devem ser alimentados pelo circuito de potência da ponte H.
 
-O **HC-SR04** pode ser utilizado para interromper ou alterar o movimento do robô ao detectar um obstáculo.
+## Controle por Wi-Fi
 
----
+O ESP32 cria a rede:
 
-## 🔌 Alimentação
+- **Rede:** `Carrinho-ESP32`
+- **Senha:** `12345678`
+- **Página:** `http://192.168.4.1`, ou o endereço exibido no Serial
 
-A alimentação parte da bateria **18650** e passa pela chave liga/desliga.
+O celular ou computador conecta-se a essa rede e acessa a página pelo navegador. Não é necessário um aplicativo Bluetooth.
 
-O conversor **Step-Up** deve ser ajustado para fornecer aproximadamente **5,0 V** para os módulos que necessitam dessa tensão.
-
-> [!IMPORTANT]
-> Confira a tensão na saída do Step-Up com um multímetro **antes de conectar o Arduino**.
-
-### Sugestão de distribuição
-
-```text
-Bateria 18650
-     |
-     +--> Chave liga/desliga
-              |
-              +--> Step-Up 5 V
-                       |
-                       +--> Arduino 5V
-                       +--> HC-05
-                       +--> HC-SR04
-
-Bateria / alimentação dos motores
-     |
-     +--> DRV8833
-              |
-              +--> Motor esquerdo
-              +--> Motor direito
-```
-
-Todos os módulos devem compartilhar o mesmo **GND**.
-
-> [!NOTE]
-> A alimentação dos motores deve respeitar a tensão nominal dos motores utilizados. O DRV8833 permite controlar os motores separadamente e suporta PWM para controle de velocidade.
-
----
-
-## 🔗 Ligações principais
-
-Os pinos podem ser definidos de acordo com o código utilizado.
-
-### DRV8833
-
-| DRV8833 | Arduino |
+| Comando | Rota HTTP |
 |---|---|
-| AIN1 | Pino digital/PWM |
-| AIN2 | Pino digital/PWM |
-| BIN1 | Pino digital/PWM |
-| BIN2 | Pino digital/PWM |
-| GND | GND |
-| VM | Alimentação dos motores |
-| AOUT1 / AOUT2 | Motor esquerdo |
-| BOUT1 / BOUT2 | Motor direito |
+| Frente | `/frente` |
+| Ré | `/tras` |
+| Esquerda | `/esquerda` |
+| Direita | `/direita` |
+| Parar | `/parar` |
 
-### HC-SR04
+Na versão CP2, o botão deve permanecer pressionado para autorizar o movimento. Soltar o botão envia a parada. A autorização expira após 700 ms sem renovação dos comandos.
 
-| HC-SR04 | Arduino |
-|---|---|
-| VCC | 5 V |
-| GND | GND |
-| TRIG | Pino digital |
-| ECHO | Pino digital |
+## Integração do sensor ultrassônico
 
-### HC-05
-
-| HC-05 | Arduino |
-|---|---|
-| VCC | 5 V* |
-| GND | GND |
-| TXD | RX do Arduino |
-| RXD | TX do Arduino através de divisor de tensão |
-
-\* Em módulos HC-05 montados em placa breakout, o VCC normalmente aceita 5 V. O pino RX do módulo trabalha com nível lógico de aproximadamente 3,3 V, por isso é recomendável utilizar um divisor resistivo na linha Arduino TX → HC-05 RX.
-
----
-
-## 🎮 Comandos Bluetooth
-
-Uma implementação simples pode utilizar caracteres enviados por um aplicativo Bluetooth:
-
-| Comando | Movimento |
-|---|---|
-| `F` | Frente |
-| `B` | Ré |
-| `L` | Esquerda |
-| `R` | Direita |
-| `S` | Parar |
-
-Exemplo:
-
-```text
-Celular
-   |
-Bluetooth
-   |
-  HC-05
-   |
-Arduino
-   |
-DRV8833
-   |
-Motores
-```
-
----
-
-## 🚦 Lógica de movimentação
-
-### Frente
-
-```text
-Motor esquerdo  -> frente
-Motor direito   -> frente
-```
-
-### Ré
-
-```text
-Motor esquerdo  -> trás
-Motor direito   -> trás
-```
-
-### Esquerda
-
-```text
-Motor esquerdo  -> reduz/parado/trás
-Motor direito   -> frente
-```
-
-### Direita
-
-```text
-Motor esquerdo  -> frente
-Motor direito   -> reduz/parado/trás
-```
-
-### Parar
-
-```text
-Motor esquerdo  -> parado
-Motor direito   -> parado
-```
-
----
-
-## 📡 Detecção de obstáculos
-
-O HC-SR04 calcula a distância utilizando o tempo de retorno de uma onda ultrassônica.
-
-A distância aproximada pode ser calculada por:
+O firmware envia um pulso de aproximadamente 10 microssegundos ao TRIG e mede a duração do retorno no ECHO.
 
 ```cpp
-distancia_cm = duracao_us * 0.0343 / 2;
+distancia_cm = duracao_us * 0.0343 / 2.0;
 ```
 
-Uma lógica possível é:
+Foram implementados:
+
+- leitura periódica a cada 100 ms, equivalente a 10 Hz;
+- espera máxima de 25 ms pelo pulso de retorno;
+- validação da distância entre 2 e 300 cm;
+- descarte de leituras inválidas;
+- proteção frontal independente do modelo a até 20 cm;
+- apresentação da distância na página web;
+- diagnóstico do pulso ECHO no Monitor Serial.
+
+### Monitoramento no Serial
+
+Abra o Monitor Serial em **115200 baud**. No modo de coleta, cada tentativa de leitura informa o pulso recebido e a distância calculada.
+
+Exemplo ilustrativo de uma leitura:
 
 ```text
-Se distância > limite:
-    permitir movimento
-
-Se distância <= limite:
-    parar motores
-    bloquear avanço
+SENSOR | ECHO=1749 us | distancia bruta=30.0 cm
 ```
 
-Por exemplo, pode-se definir um limite de segurança de **15 a 25 cm**, dependendo da velocidade do carrinho e do ambiente.
-
----
-
-## 💻 Estrutura sugerida do repositório
+Quando não é medido um pulso de retorno:
 
 ```text
-carrinho-robotico/
-│
-├── README.md
-├── src/
-│   └── carrinho_robotico.ino
-│
-├── docs/
-│   ├── carrinho-robotico.png
-│   ├── diagrama-eletrico.png
-│   └── esquema-conexoes.md
-│
-└── LICENSE
+SENSOR | ECHO=0 us | TIMEOUT: pulso nao medido
 ```
 
----
+Uma leitura inválida durante a gravação aborta a coleta. O alvo, as conexões e a alimentação devem ser verificados antes de repetir a gravação.
 
-## ▶️ Como executar
+## Organização do firmware CP2
 
-1. Monte os componentes no chassi.
-2. Faça as conexões elétricas.
-3. Ajuste o Step-Up para **5 V**.
-4. Conecte o Arduino ao computador via USB.
-5. Abra a **Arduino IDE**.
-6. Selecione a placa **Arduino Uno**.
-7. Selecione a porta serial correspondente.
-8. Carregue o arquivo `.ino`.
-9. Desconecte o USB.
-10. Ligue o carrinho pela chave.
-11. Pareie o celular com o módulo HC-05.
-12. Abra um aplicativo de terminal Bluetooth.
-13. Envie os comandos de movimentação.
+| Arquivo | Responsabilidade |
+|---|---|
+| `carrinho_cp2.ino` | Inicialização, servidor, sensor, coleta e chamada do classificador |
+| `Config.h` | Pinos, modo de execução, tempos e PWM |
+| `Controle.h` | Escolha da ação dos motores a partir dos comandos, proteções e classe |
+| `Pagina.h` | Interface do navegador |
 
----
+Os quatro arquivos devem permanecer juntos em `CP2/firmware/carrinho_cp2/`.
 
-## 📱 Pareamento do HC-05
+## Modo de coleta e dataset gerado
 
-Normalmente o módulo aparece no celular como:
+Para coletar dados, mantenha em `Config.h`:
+
+```cpp
+#define USAR_TINYML 0
+```
+
+Nesse modo, os motores ficam desabilitados. Na página web, o usuário escolhe a classe, o conjunto (`treino` ou `teste`) e o identificador da sessão.
+
+Cada gravação concluída gera **50 medições**, aproximadamente cinco segundos a 10 Hz. O download produz um CSV com **apenas duas colunas**:
+
+```csv
+timestamp,distancia_cm
+```
+
+- `timestamp`: tempo na grade nominal, em milissegundos, de 0 até 4900, com passo de 100;
+- `distancia_cm`: leitura do sensor em centímetros, com ponto decimal.
+
+A classe não é acrescentada como coluna pelo firmware: ela aparece no nome do arquivo. O padrão é:
 
 ```text
-HC-05
+{classe}.{conjunto}_{sessao}_{id}_{sequencia}.csv
 ```
 
-Senhas de pareamento comuns:
+O rótulo da coleta é escolhido pelo grupo de acordo com a situação física. A classificação pelo modelo ocorre posteriormente, no modo TinyML.
 
-```text
-1234
+**100 medições reais correspondem a duas gravações de 50 linhas.** É necessário repetir a coleta para representar todas as classes e reservar sessões diferentes para teste. Uma gravação com atraso de amostragem maior que 20 ms também é abortada.
+
+Baixe cada arquivo antes da próxima gravação ou de reiniciar o ESP32. Os arquivos são mantidos temporariamente na memória da placa.
+
+Dados simulados servem para demonstração do formato e do treinamento. O dataset da entrega deve ser coletado pelo próprio grupo com o sensor do carrinho.
+
+## TinyML com Edge Impulse
+
+O fluxo previsto para o CP2 é:
+
+**Sensor → coleta real → CSV → Edge Impulse → treinamento → testes → biblioteca → ESP32 → inferência → ação.**
+
+### Classes propostas
+
+| Classe | Faixa de referência para coleta | Ação prevista ao solicitar frente |
+|---|---|---|
+| `perto` | 5 a 35 cm | Parar |
+| `medio` | Acima de 35 até 80 cm | Avançar com PWM 150 |
+| `longe` | Acima de 80 até 200 cm | Avançar com PWM 190 |
+
+As faixas orientam a rotulagem do dataset. No modo TinyML, a classe deve vir da inferência do modelo, e não de comparações com esses limites no código de movimentação.
+
+O firmware foi preparado para um eixo de entrada (`distancia_cm`), 10 Hz e uma janela de 1000 ms com 10 leituras. A janela é reavaliada a cada duas novas leituras, aproximadamente 200 ms.
+
+A integração utiliza:
+
+```cpp
+ei::numpy::signal_from_buffer(entradas, cfg::LEITURAS_JANELA, &sinal);
+run_classifier(&sinal, &resultado, false);
 ```
 
-ou
+O avanço também depende de leitura válida, inferência recente e escore mínimo de 0,80. A proteção de 20 cm permanece independente do modelo. Ré e giros continuam sendo manobras manuais; o sensor observa a frente.
 
-```text
-0000
-```
+### Ativação após treinar
 
-Após o pareamento, utilize um aplicativo capaz de enviar caracteres via Bluetooth Serial.
+1. Importe os CSVs de treino e teste nos conjuntos correspondentes do Edge Impulse.
+2. Configure o Impulse, gere as features, treine e avalie o modelo.
+3. Exporte a biblioteca Arduino e instale o ZIP na Arduino IDE.
+4. Substitua `SEU_PROJETO_inferencing.h` pelo cabeçalho real da biblioteca exportada.
+5. Altere `USAR_TINYML` para `1` e grave novamente o ESP32.
+6. Verifique a inferência no Serial e sua ação física nos motores.
 
----
+Para a configuração proposta, utilize Raw data com escala `0.01`. O firmware fornece centímetros brutos; a biblioteca exportada aplica o processamento configurado.
 
-## ⚠️ Cuidados
+## Como executar a coleta
 
-- Não conecte a bateria com polaridade invertida.
-- Verifique a tensão do Step-Up antes de alimentar o Arduino.
-- Nunca provoque curto-circuito em uma célula 18650.
-- Utilize uma bateria em boas condições.
-- Garanta que todos os módulos compartilhem o mesmo GND.
-- Evite alimentar os motores diretamente pelo pino 5 V do Arduino.
-- Se o Arduino reiniciar quando os motores arrancarem, revise a alimentação e considere filtragem/desacoplamento adicional.
-- Fixe os fios para que eles não encostem nas rodas.
+1. Abra `CP2/firmware/carrinho_cp2/carrinho_cp2.ino` na Arduino IDE.
+2. Confira os três arquivos `.h` na mesma pasta e `USAR_TINYML=0`.
+3. Selecione a placa ESP32 correspondente à montagem e a porta USB.
+4. Envie o código e abra o Monitor Serial em 115200 baud.
+5. Se necessário, pressione EN/RESET para ver a inicialização.
+6. Conecte o celular à rede `Carrinho-ESP32` e abra o IP exibido.
+7. Verifique se a distância muda corretamente ao mover um objeto à frente do sensor.
+8. Escolha classe, conjunto e sessão. Clique em **Gravar 5 segundos**.
+9. Após a conclusão, clique em **Baixar CSV**.
+10. Organize os arquivos em `CP2/dados/treino/` e `CP2/dados/teste/`.
 
----
+O guia detalhado está em [CP2/README.md](CP2/README.md).
 
-## 🔮 Melhorias futuras
+## Estado atual e entrega
 
-- [ ] Controle de velocidade por PWM
-- [ ] Modo autônomo para desvio de obstáculos
-- [ ] Aplicativo próprio para controle do carrinho
-- [ ] Indicador de nível da bateria
-- [ ] Controle proporcional de velocidade
-- [ ] Sensores adicionais
-- [ ] Servo motor para movimentar o HC-SR04
-- [ ] Telemetria em tempo real
-- [ ] Integração com ESP32 ou Wi-Fi
-- [ ] Mapeamento de ambiente
+| Item | Situação |
+|---|---|
+| Inicialização do ESP32 e servidor Wi-Fi | Confirmada durante o acompanhamento |
+| Leitura, validação e diagnóstico do HC-SR04 | Implementados; obtenção de leituras válidas ainda em verificação |
+| Geração e download de CSV | Implementados; dataset real ainda deve ser coletado |
+| Rotina de inferência e ações por classe | Preparadas no código, dependentes da biblioteca treinada |
+| Treinamento, métricas e matriz de confusão | Pendentes |
+| Biblioteca real embarcada e teste físico TinyML | Pendentes |
+| Vídeo da demonstração final | Pendente |
 
----
+Para concluir a entrega:
 
-## 🖼️ Montagem
+- [ ] Coletar e publicar os CSVs reais, com contagens e protocolo.
+- [ ] Separar treino e teste por gravações e sessões.
+- [ ] Documentar configuração, treinamento, métricas e testes no Edge Impulse.
+- [ ] Adicionar prints reais do processo.
+- [ ] Exportar e integrar a biblioteca treinada no ESP32.
+- [ ] Demonstrar parada e alteração de velocidade causadas pela classe inferida.
+- [ ] Gravar e disponibilizar o vídeo final.
+- [ ] Preservar o CP1 e registrar commits reais da evolução para o CP2.
 
-A organização proposta utiliza:
+Uma demonstração da ação do modelo deve mostrar, por exemplo, a parada por `perto` a aproximadamente 30 cm, acima do limite fixo de emergência de 20 cm.
 
-- bateria na lateral esquerda;
-- Arduino Uno na região central;
-- DRV8833 próximo aos motores;
-- HC-05 na lateral;
-- HC-SR04 na parte frontal;
-- Step-Up próximo ao circuito de alimentação;
-- chave liga/desliga em posição de fácil acesso.
+## Uso do projeto
 
-Essa disposição ajuda a reduzir o comprimento dos cabos e facilita a manutenção do projeto.
-
----
-
-## 📄 Licença
-
-Este projeto pode ser utilizado para fins acadêmicos, educacionais e de prototipagem.
-
----
-
-## 👨‍💻 Autores
-
-Projeto desenvolvido como trabalho acadêmico de robótica e sistemas embarcados.
+Projeto desenvolvido para fins acadêmicos, educacionais e de prototipagem.
